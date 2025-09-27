@@ -32,8 +32,8 @@ type Engine struct {
 
 // PushOptions controls stack push operations.
 type PushOptions struct {
-	Remote string
-	Force  bool
+	Remote    string
+	IncludePR bool
 }
 
 // CommitOptions describes how git commits should be created.
@@ -323,6 +323,103 @@ func (e *Engine) Commit(ctx context.Context, opts CommitOptions) error {
 	return nil
 }
 
+// Fold merges the current branch into its parent and deletes the branch while
+// reparenting any descendants to the parent.
+func (e *Engine) Fold(ctx context.Context, allowEmpty bool) error {
+	graph, err := e.loadGraph(ctx)
+	if err != nil {
+		return err
+	}
+
+	current, err := e.repo.CurrentBranch(ctx)
+	if err != nil {
+		return err
+	}
+
+	branch, ok := graph.Branch(current)
+	if !ok {
+		return fmt.Errorf("engine: branch %s not found", current)
+	}
+	if branch.Parent == nil {
+		return fmt.Errorf("engine: cannot fold stack bottom branch %s", branch.Name)
+	}
+	parent := branch.Parent
+	if parent.Parent == nil {
+		return fmt.Errorf("engine: cannot fold into stack bottom branch %s", parent.Name)
+	}
+
+	parentCommit := strings.TrimSpace(parent.Commit)
+	if parentCommit == "" {
+		return fmt.Errorf("engine: parent branch %s has no commit", parent.Name)
+	}
+	trackedParent := strings.TrimSpace(branch.ParentCommit)
+	if trackedParent == "" {
+		return fmt.Errorf("engine: branch %s has no recorded parent commit", branch.Name)
+	}
+	if trackedParent != parentCommit {
+		return fmt.Errorf("engine: branch %s is not synced with parent %s", branch.Name, parent.Name)
+	}
+
+	headCommit := strings.TrimSpace(branch.Commit)
+	if headCommit == "" {
+		return fmt.Errorf("engine: branch %s has no commit", branch.Name)
+	}
+
+	if err := e.repo.Checkout(ctx, parent.Name); err != nil {
+		return err
+	}
+
+	commits := []string{}
+	if parentCommit != headCommit {
+		revRange := fmt.Sprintf("%s..%s", parentCommit, headCommit)
+		out, err := e.repo.Run(ctx, "rev-list", "--reverse", revRange)
+		if err != nil {
+			return fmt.Errorf("engine: git rev-list --reverse %s: %w", revRange, err)
+		}
+		commits = parseRevList(out)
+	}
+
+	if e.cfg.UseMerge {
+		if _, err := e.repo.Run(ctx, "merge", branch.Name); err != nil {
+			return fmt.Errorf("engine: git merge %s: %w", branch.Name, err)
+		}
+	} else {
+		for _, commit := range commits {
+			if err := e.applyCherryPick(ctx, commit, allowEmpty); err != nil {
+				return err
+			}
+		}
+	}
+
+	parentHead, err := e.repo.ReadRef(ctx, fmt.Sprintf("refs/heads/%s", parent.Name))
+	if err != nil {
+		return err
+	}
+	parentHead = strings.TrimSpace(parentHead)
+	if parentHead == "" {
+		return fmt.Errorf("engine: parent branch %s has no head commit", parent.Name)
+	}
+
+	for _, child := range branch.Children {
+		if _, err := e.repo.Run(ctx, "config", fmt.Sprintf("branch.%s.merge", child.Name), fmt.Sprintf("refs/heads/%s", parent.Name)); err != nil {
+			return fmt.Errorf("engine: git config branch.%s.merge: %w", child.Name, err)
+		}
+		oldParent := strings.TrimSpace(child.ParentCommit)
+		if err := e.repo.WriteRef(ctx, fmt.Sprintf("refs/stack-parent/%s", child.Name), parentHead, oldParent); err != nil {
+			return fmt.Errorf("engine: update parent ref for %s: %w", child.Name, err)
+		}
+	}
+
+	if _, err := e.repo.Run(ctx, "branch", "-D", branch.Name); err != nil {
+		return fmt.Errorf("engine: git branch -D %s: %w", branch.Name, err)
+	}
+	if _, err := e.repo.Run(ctx, "update-ref", "-d", fmt.Sprintf("refs/stack-parent/%s", branch.Name)); err != nil {
+		return fmt.Errorf("engine: remove stack parent ref for %s: %w", branch.Name, err)
+	}
+
+	return nil
+}
+
 // Log returns the repository log output honoring configuration options.
 func (e *Engine) Log(ctx context.Context) (string, error) {
 	args := []string{"log"}
@@ -477,6 +574,15 @@ func (e *Engine) loadGraph(ctx context.Context) (*stackgraph.Graph, error) {
 }
 
 func (e *Engine) StackPush(ctx context.Context, opts PushOptions) error {
+	plan, err := e.PlanStackPush(ctx, opts.Remote, opts.IncludePR)
+	if err != nil {
+		return err
+	}
+	return e.ExecutePushPlan(ctx, plan)
+}
+
+// DownstackSync rebases or merges the current branch and its ancestors.
+func (e *Engine) DownstackSync(ctx context.Context) error {
 	graph, err := e.loadGraph(ctx)
 	if err != nil {
 		return err
@@ -487,38 +593,26 @@ func (e *Engine) StackPush(ctx context.Context, opts PushOptions) error {
 		return err
 	}
 
-	down, err := graph.Downstack(current)
-	if err != nil {
-		return err
+	branch, ok := graph.Branch(current)
+	if !ok {
+		return fmt.Errorf("engine: branch %s not found", current)
 	}
-	if len(down) == 0 {
-		return fmt.Errorf("engine: branch %s has empty stack", current)
-	}
-	root := down[len(down)-1]
 
-	branches := gatherBranches([]*stackgraph.Branch{root})
-	if len(branches) == 0 {
+	forest := downstackForest(branch)
+	if len(forest) == 0 {
 		return nil
 	}
 
-	remote := opts.Remote
-	if remote == "" {
-		remote = "origin"
-	}
+	return e.syncForest(ctx, forest, current)
+}
 
-	baseArgs := []string{"push"}
-	if opts.Force {
-		baseArgs = append(baseArgs, "--force-with-lease")
+// DownstackPush pushes the current branch and its ancestors to the remote.
+func (e *Engine) DownstackPush(ctx context.Context, opts PushOptions) error {
+	plan, err := e.PlanDownstackPush(ctx, opts.Remote, opts.IncludePR)
+	if err != nil {
+		return err
 	}
-
-	for _, branch := range branches {
-		args := append(baseArgs[:len(baseArgs):len(baseArgs)], remote, fmt.Sprintf("refs/heads/%s", branch.Name))
-		if _, err := e.repo.Run(ctx, args...); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return e.ExecutePushPlan(ctx, plan)
 }
 
 // UpstackSync syncs the current branch and its descendants.
@@ -543,39 +637,11 @@ func (e *Engine) UpstackSync(ctx context.Context) error {
 
 // UpstackPush pushes the current branch and descendants to the remote.
 func (e *Engine) UpstackPush(ctx context.Context, opts PushOptions) error {
-	graph, err := e.loadGraph(ctx)
+	plan, err := e.PlanUpstackPush(ctx, opts.Remote, opts.IncludePR)
 	if err != nil {
 		return err
 	}
-
-	current, err := e.repo.CurrentBranch(ctx)
-	if err != nil {
-		return err
-	}
-
-	branch, ok := graph.Branch(current)
-	if !ok {
-		return fmt.Errorf("engine: branch %s not found", current)
-	}
-
-	remote := opts.Remote
-	if remote == "" {
-		remote = "origin"
-	}
-
-	baseArgs := []string{"push"}
-	if opts.Force {
-		baseArgs = append(baseArgs, "--force-with-lease")
-	}
-
-	branches := gatherBranches([]*stackgraph.Branch{branch})
-	for _, b := range branches {
-		args := append(baseArgs[:len(baseArgs):len(baseArgs)], remote, fmt.Sprintf("refs/heads/%s", b.Name))
-		if _, err := e.repo.Run(ctx, args...); err != nil {
-			return err
-		}
-	}
-	return nil
+	return e.ExecutePushPlan(ctx, plan)
 }
 
 // OpenPullRequests returns open PRs keyed by head branch name.
@@ -600,4 +666,91 @@ func (e *Engine) AuthoredPullRequests(ctx context.Context) ([]githubcli.PullRequ
 
 func (e *Engine) ReviewRequestedPullRequests(ctx context.Context) ([]githubcli.PullRequest, error) {
 	return e.gh.ListPRs(ctx, githubcli.ListParams{State: "open", Search: "review-requested:@me"})
+}
+
+func cloneBranchShallow(src *stackgraph.Branch) *stackgraph.Branch {
+	if src == nil {
+		return nil
+	}
+	return &stackgraph.Branch{
+		Name:         src.Name,
+		ParentCommit: src.ParentCommit,
+		Commit:       src.Commit,
+	}
+}
+
+func (e *Engine) applyCherryPick(ctx context.Context, commit string, allowEmpty bool) error {
+	commit = strings.TrimSpace(commit)
+	if commit == "" {
+		return nil
+	}
+
+	if allowEmpty {
+		if _, err := e.repo.Run(ctx, "cherry-pick", "--allow-empty", commit); err != nil {
+			return fmt.Errorf("engine: git cherry-pick --allow-empty %s: %w", commit, err)
+		}
+		return nil
+	}
+
+	if _, err := e.repo.Run(ctx, "cherry-pick", "--no-commit", commit); err != nil {
+		_, _ = e.repo.Run(ctx, "reset", "--hard", "HEAD")
+		if _, err := e.repo.Run(ctx, "cherry-pick", commit); err != nil {
+			return fmt.Errorf("engine: git cherry-pick %s: %w", commit, err)
+		}
+		return nil
+	}
+
+	diff, err := e.repo.Run(ctx, "diff", "--cached", "--name-only")
+	if err != nil {
+		_, _ = e.repo.Run(ctx, "reset", "--hard", "HEAD")
+		return fmt.Errorf("engine: git diff --cached --name-only: %w", err)
+	}
+	_, _ = e.repo.Run(ctx, "reset", "--hard", "HEAD")
+
+	if strings.TrimSpace(diff) == "" {
+		return nil
+	}
+
+	if _, err := e.repo.Run(ctx, "cherry-pick", commit); err != nil {
+		return fmt.Errorf("engine: git cherry-pick %s: %w", commit, err)
+	}
+	return nil
+}
+
+func parseRevList(output string) []string {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return nil
+	}
+	lines := strings.Split(output, "\n")
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			result = append(result, line)
+		}
+	}
+	return result
+}
+
+func downstackForest(branch *stackgraph.Branch) []*stackgraph.Branch {
+	if branch == nil {
+		return nil
+	}
+
+	var head *stackgraph.Branch
+	for b := branch; b != nil; b = b.Parent {
+		clone := cloneBranchShallow(b)
+		if head != nil {
+			clone.Children = []*stackgraph.Branch{head}
+			head.Parent = clone
+		}
+		head = clone
+	}
+
+	if head == nil {
+		return nil
+	}
+
+	return []*stackgraph.Branch{head}
 }

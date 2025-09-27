@@ -12,6 +12,8 @@ import (
 // Client describes the interactions stacky performs with the GitHub CLI.
 type Client interface {
 	ListPRs(ctx context.Context, params ListParams) ([]PullRequest, error)
+	CreatePR(ctx context.Context, params CreateParams) error
+	EditPRBase(ctx context.Context, number int, base string) error
 }
 
 // Runner abstracts execution of the `gh` binary to enable testing without
@@ -38,6 +40,12 @@ type ListParams struct {
 	Head   string
 	State  string
 	Search string
+}
+
+// CreateParams describes the arguments used when opening a new pull request.
+type CreateParams struct {
+	Head string
+	Base string
 }
 
 // PullRequest mirrors the fields consumed by the CLI presentation.
@@ -103,6 +111,30 @@ func (c *client) ListPRs(ctx context.Context, params ListParams) ([]PullRequest,
 	}
 
 	return prs, nil
+}
+
+func (c *client) CreatePR(ctx context.Context, params CreateParams) error {
+	if params.Head == "" {
+		return fmt.Errorf("githubcli: head branch required")
+	}
+	if params.Base == "" {
+		return fmt.Errorf("githubcli: base branch required")
+	}
+	args := []string{"pr", "create", "--head", params.Head, "--base", params.Base, "--fill"}
+	_, err := c.runner.Run(ctx, args...)
+	return err
+}
+
+func (c *client) EditPRBase(ctx context.Context, number int, base string) error {
+	if number <= 0 {
+		return fmt.Errorf("githubcli: invalid pull request number %d", number)
+	}
+	if base == "" {
+		return fmt.Errorf("githubcli: base branch required")
+	}
+	args := []string{"pr", "edit", fmt.Sprintf("%d", number), "--base", base}
+	_, err := c.runner.Run(ctx, args...)
+	return err
 }
 
 func listFields() []string {

@@ -27,9 +27,6 @@ func newDownstackInfoCmd() *cobra.Command {
 		Short:   "Info for current downstack",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			includePR, _ := cmd.Flags().GetBool("pr")
-			if includePR {
-				return fmt.Errorf("--pr not implemented in Go rewrite yet")
-			}
 
 			ctx := cmd.Context()
 			eng, err := newEngine(ctx)
@@ -71,10 +68,23 @@ func newDownstackPushCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "push",
 		Short: "Push",
-		RunE:  notImplemented("downstack push"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			eng, err := newEngine(ctx)
+			if err != nil {
+				return err
+			}
+
+			remote, _ := cmd.Flags().GetString("remote-name")
+			force, _ := cmd.Flags().GetBool("force")
+			noPR, _ := cmd.Flags().GetBool("no-pr")
+
+			return runPushFlow(cmd, eng, remote, !noPR, force, eng.PlanDownstackPush)
+		},
 	}
 	cmd.Flags().BoolP("force", "f", false, "bypass confirmation")
 	cmd.Flags().Bool("no-pr", false, "skip creating PRs")
+	cmd.Flags().String("remote-name", "origin", "git remote to use")
 	return cmd
 }
 
@@ -82,6 +92,13 @@ func newDownstackSyncCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
 		Short: "Sync",
-		RunE:  notImplemented("downstack sync"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			eng, err := newEngine(ctx)
+			if err != nil {
+				return err
+			}
+			return eng.DownstackSync(ctx)
+		},
 	}
 }

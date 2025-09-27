@@ -48,3 +48,32 @@ func TestListPRsWithSearchAddsFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, runner.args, "review-requested:@me")
 }
+
+func TestCreatePRValidatesParams(t *testing.T) {
+	client := githubcli.NewWithRunner(&fakeRunner{})
+	err := client.CreatePR(context.Background(), githubcli.CreateParams{Head: "", Base: "main"})
+	require.Error(t, err)
+
+	err = client.CreatePR(context.Background(), githubcli.CreateParams{Head: "feature", Base: ""})
+	require.Error(t, err)
+}
+
+func TestCreatePRRunsGh(t *testing.T) {
+	runner := &fakeRunner{}
+	client := githubcli.NewWithRunner(runner)
+	require.NoError(t, client.CreatePR(context.Background(), githubcli.CreateParams{Head: "feature", Base: "main"}))
+	require.Equal(t, []string{"pr", "create", "--head", "feature", "--base", "main", "--fill"}, runner.args)
+}
+
+func TestEditPRBaseValidatesParams(t *testing.T) {
+	client := githubcli.NewWithRunner(&fakeRunner{})
+	require.Error(t, client.EditPRBase(context.Background(), 0, "main"))
+	require.Error(t, client.EditPRBase(context.Background(), 3, ""))
+}
+
+func TestEditPRBaseRunsGh(t *testing.T) {
+	runner := &fakeRunner{}
+	client := githubcli.NewWithRunner(runner)
+	require.NoError(t, client.EditPRBase(context.Background(), 42, "develop"))
+	require.Equal(t, []string{"pr", "edit", "42", "--base", "develop"}, runner.args)
+}

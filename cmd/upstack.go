@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pmenglund/stacky/internal/engine"
 	"github.com/pmenglund/stacky/internal/ui"
 )
 
@@ -30,9 +29,6 @@ func newUpstackInfoCmd() *cobra.Command {
 		Short:   "Info for current upstack",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			includePR, _ := cmd.Flags().GetBool("pr")
-			if includePR {
-				return fmt.Errorf("--pr not implemented in Go rewrite yet")
-			}
 
 			ctx := cmd.Context()
 			eng, err := newEngine(ctx)
@@ -83,11 +79,9 @@ func newUpstackPushCmd() *cobra.Command {
 
 			remote, _ := cmd.Flags().GetString("remote-name")
 			force, _ := cmd.Flags().GetBool("force")
+			noPR, _ := cmd.Flags().GetBool("no-pr")
 
-			return eng.UpstackPush(ctx, engine.PushOptions{
-				Remote: remote,
-				Force:  force,
-			})
+			return runPushFlow(cmd, eng, remote, !noPR, force, eng.PlanUpstackPush)
 		},
 	}
 	cmd.Flags().BoolP("force", "f", false, "bypass confirmation")

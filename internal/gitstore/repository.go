@@ -166,6 +166,19 @@ func (r *Repository) BranchMergeTarget(ctx context.Context, branch string) (stri
 	return strings.TrimSpace(out), nil
 }
 
+// Config retrieves a git configuration value, returning an empty string if the
+// key is not present.
+func (r *Repository) Config(ctx context.Context, key string) (string, error) {
+	out, err := r.runner.Run(ctx, "git", "config", key)
+	if err != nil {
+		if isMissingConfig(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 func isMissingRef(err error) bool {
 	var execErr *exec.ExitError
 	if errors.As(err, &execErr) {

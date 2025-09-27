@@ -18,9 +18,14 @@ import (
 )
 
 type fakeGitHub struct {
-	prs    []githubcli.PullRequest
-	err    error
-	params []githubcli.ListParams
+	prs     []githubcli.PullRequest
+	err     error
+	params  []githubcli.ListParams
+	created []githubcli.CreateParams
+	edits   []struct {
+		number int
+		base   string
+	}
 }
 
 func (f *fakeGitHub) ListPRs(_ context.Context, params githubcli.ListParams) ([]githubcli.PullRequest, error) {
@@ -29,6 +34,25 @@ func (f *fakeGitHub) ListPRs(_ context.Context, params githubcli.ListParams) ([]
 		return nil, f.err
 	}
 	return f.prs, nil
+}
+
+func (f *fakeGitHub) CreatePR(_ context.Context, params githubcli.CreateParams) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.created = append(f.created, params)
+	return nil
+}
+
+func (f *fakeGitHub) EditPRBase(_ context.Context, number int, base string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.edits = append(f.edits, struct {
+		number int
+		base   string
+	}{number: number, base: base})
+	return nil
 }
 
 func TestStackForestAndCurrentStackRoot(t *testing.T) {
@@ -162,6 +186,8 @@ func TestUpdateErrorsWhenRemoteMissing(t *testing.T) {
 	runGit(t, localDir, "init", "-b", "main")
 	runGit(t, localDir, "config", "user.email", "engine@example.com")
 	runGit(t, localDir, "config", "user.name", "Engine Tester")
+	runGit(t, localDir, "config", "commit.gpgsign", "false")
+	runGit(t, localDir, "config", "core.fsmonitor", "false")
 	require.NoError(t, os.WriteFile(filepath.Join(localDir, "README.md"), []byte("local"), 0o644))
 	runGit(t, localDir, "add", "README.md")
 	runGit(t, localDir, "commit", "-m", "initial commit")
@@ -218,6 +244,74 @@ func TestCommitFailsWhenNoEditWithoutAmend(t *testing.T) {
 	require.Contains(t, err.Error(), "--no-edit")
 }
 
+func TestFoldCherryPickReparentsChildren(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+
+	runGit(t, repoDir, "checkout", "feature")
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "feature.txt"), []byte("feature change"), 0o644))
+	runGit(t, repoDir, "add", "feature.txt")
+	runGit(t, repoDir, "commit", "-m", "feature change")
+
+	runGit(t, repoDir, "checkout", "-b", "sub")
+	runGit(t, repoDir, "config", "branch.sub.merge", "refs/heads/feature")
+	runGit(t, repoDir, "config", "branch.sub.remote", ".")
+	featureHead := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature"))
+	runGit(t, repoDir, "update-ref", "refs/stack-parent/sub", featureHead)
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "sub.txt"), []byte("sub change"), 0o644))
+	runGit(t, repoDir, "add", "sub.txt")
+	runGit(t, repoDir, "commit", "-m", "sub change")
+
+	runGit(t, repoDir, "checkout", "-b", "subchild")
+	runGit(t, repoDir, "config", "branch.subchild.merge", "refs/heads/sub")
+	runGit(t, repoDir, "config", "branch.subchild.remote", ".")
+	subHead := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "sub"))
+	runGit(t, repoDir, "update-ref", "refs/stack-parent/subchild", subHead)
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "subchild.txt"), []byte("subchild change"), 0o644))
+	runGit(t, repoDir, "add", "subchild.txt")
+	runGit(t, repoDir, "commit", "-m", "subchild change")
+
+	runGit(t, repoDir, "checkout", "sub")
+
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir()})
+	require.NoError(t, err)
+
+	require.NoError(t, eng.Fold(ctx, false))
+
+	head := strings.TrimSpace(runGitOutput(t, repoDir, "symbolic-ref", "--short", "HEAD"))
+	require.Equal(t, "feature", head)
+
+	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/sub")
+	cmd.Dir = repoDir
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	err = cmd.Run()
+	require.Error(t, err)
+
+	mergeTarget := strings.TrimSpace(runGitOutput(t, repoDir, "config", "branch.subchild.merge"))
+	require.Equal(t, "refs/heads/feature", mergeTarget)
+
+	featureHeadAfter := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature"))
+	subchildParent := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "refs/stack-parent/subchild"))
+	require.Equal(t, featureHeadAfter, subchildParent)
+
+	status := strings.TrimSpace(runGitOutput(t, repoDir, "status", "--short"))
+	require.Equal(t, "", status)
+}
+
+func TestFoldErrorsWhenParentIsStackBottom(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+
+	runGit(t, repoDir, "checkout", "feature")
+
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir()})
+	require.NoError(t, err)
+
+	err = eng.Fold(ctx, false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "stack bottom")
+}
+
 func TestStackPushPushesBranches(t *testing.T) {
 	ctx := context.Background()
 	remoteDir := filepath.Join(t.TempDir(), "remote.git")
@@ -245,6 +339,77 @@ func TestStackPushPushesBranches(t *testing.T) {
 	remoteHead := parts[0]
 	localHead := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature"))
 	require.Equal(t, localHead, remoteHead)
+}
+
+func TestPlanStackPushErrorsWhenUnsynced(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir()})
+	require.NoError(t, err)
+
+	runGit(t, repoDir, "checkout", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "diverge.txt"), []byte("main"), 0o644))
+	runGit(t, repoDir, "add", "diverge.txt")
+	runGit(t, repoDir, "commit", "-m", "diverge")
+
+	_, err = eng.PlanStackPush(ctx, "origin", false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not synced with parent")
+}
+
+func TestPlanStackPushIncludesPRActions(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+	fake := &fakeGitHub{prs: []githubcli.PullRequest{{HeadRef: "feature", Number: 7, BaseRef: "develop"}}}
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir(), GitHub: fake})
+	require.NoError(t, err)
+
+	plan, err := eng.PlanStackPush(ctx, "origin", true)
+	require.NoError(t, err)
+	require.Len(t, plan.Actions, 2)
+	var featureAction engine.PushAction
+	for _, action := range plan.Actions {
+		if action.Branch == "feature" {
+			featureAction = action
+		}
+	}
+	require.Equal(t, "main", featureAction.Parent)
+	require.Equal(t, engine.PRActionUpdateBase, featureAction.PRAction)
+	require.Equal(t, 7, featureAction.PRNumber)
+}
+
+func TestExecutePushPlanCreatesPR(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+	fake := &fakeGitHub{}
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir(), GitHub: fake})
+	require.NoError(t, err)
+
+	plan := engine.PushPlan{
+		Remote:  "origin",
+		Actions: []engine.PushAction{{Branch: "feature", Parent: "main", PRAction: engine.PRActionCreate}},
+	}
+
+	require.NoError(t, eng.ExecutePushPlan(ctx, plan))
+	require.Equal(t, []githubcli.CreateParams{{Head: "feature", Base: "main"}}, fake.created)
+}
+
+func TestExecutePushPlanEditsPRBase(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+	fake := &fakeGitHub{}
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir(), GitHub: fake})
+	require.NoError(t, err)
+
+	plan := engine.PushPlan{
+		Remote:  "origin",
+		Actions: []engine.PushAction{{Branch: "feature", Parent: "main", PRAction: engine.PRActionUpdateBase, PRNumber: 42}},
+	}
+
+	require.NoError(t, eng.ExecutePushPlan(ctx, plan))
+	require.Len(t, fake.edits, 1)
+	require.Equal(t, 42, fake.edits[0].number)
+	require.Equal(t, "main", fake.edits[0].base)
 }
 
 func TestOpenPullRequestsMapsByHead(t *testing.T) {
@@ -336,6 +501,80 @@ func TestStackSyncRebasesBranches(t *testing.T) {
 	require.Equal(t, "", status)
 }
 
+func TestDownstackSyncRebasesAncestors(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+
+	runGit(t, repoDir, "checkout", "feature")
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "feature.txt"), []byte("feature"), 0o644))
+	runGit(t, repoDir, "add", "feature.txt")
+	runGit(t, repoDir, "commit", "-m", "feature change")
+
+	runGit(t, repoDir, "checkout", "-b", "sub")
+	runGit(t, repoDir, "config", "branch.sub.merge", "refs/heads/feature")
+	runGit(t, repoDir, "config", "branch.sub.remote", ".")
+	featureHead := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature"))
+	runGit(t, repoDir, "update-ref", "refs/stack-parent/sub", featureHead)
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "sub.txt"), []byte("sub"), 0o644))
+	runGit(t, repoDir, "add", "sub.txt")
+	runGit(t, repoDir, "commit", "-m", "sub change")
+
+	runGit(t, repoDir, "checkout", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "main.txt"), []byte("main"), 0o644))
+	runGit(t, repoDir, "add", "main.txt")
+	runGit(t, repoDir, "commit", "-m", "main diverged")
+
+	runGit(t, repoDir, "checkout", "sub")
+
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir()})
+	require.NoError(t, err)
+
+	require.NoError(t, eng.DownstackSync(ctx))
+
+	headBranch := strings.TrimSpace(runGitOutput(t, repoDir, "symbolic-ref", "--short", "HEAD"))
+	require.Equal(t, "sub", headBranch)
+
+	updatedMainHead := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "main"))
+	featureParent := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "refs/stack-parent/feature"))
+	require.Equal(t, updatedMainHead, featureParent)
+
+	updatedFeatureHead := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature"))
+	subParent := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "refs/stack-parent/sub"))
+	require.Equal(t, updatedFeatureHead, subParent)
+}
+
+func TestDownstackPushPushesAncestors(t *testing.T) {
+	ctx := context.Background()
+	repoDir := initRepo(t)
+
+	runGit(t, repoDir, "checkout", "feature")
+	runGit(t, repoDir, "checkout", "-b", "sub")
+	runGit(t, repoDir, "config", "branch.sub.merge", "refs/heads/feature")
+	runGit(t, repoDir, "config", "branch.sub.remote", ".")
+	featureHead := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature"))
+	runGit(t, repoDir, "update-ref", "refs/stack-parent/sub", featureHead)
+	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "sub.txt"), []byte("sub"), 0o644))
+	runGit(t, repoDir, "add", "sub.txt")
+	runGit(t, repoDir, "commit", "-m", "sub change")
+	runGit(t, repoDir, "checkout", "sub")
+
+	remoteDir := t.TempDir()
+	runGit(t, remoteDir, "init", "--bare")
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+
+	eng, err := engine.New(ctx, engine.Options{RepoPath: repoDir, HomeDir: t.TempDir()})
+	require.NoError(t, err)
+
+	require.NoError(t, eng.DownstackPush(ctx, engine.PushOptions{}))
+
+	_, err = os.Stat(filepath.Join(remoteDir, "refs", "heads", "feature"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(remoteDir, "refs", "heads", "sub"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(remoteDir, "refs", "heads", "main"))
+	require.True(t, os.IsNotExist(err))
+}
+
 func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -344,6 +583,7 @@ func initRepo(t *testing.T) string {
 	runGit(t, dir, "config", "user.email", "engine@example.com")
 	runGit(t, dir, "config", "user.name", "Engine Tester")
 	runGit(t, dir, "config", "commit.gpgsign", "false")
+	runGit(t, dir, "config", "core.fsmonitor", "false")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi"), 0o644))
 
