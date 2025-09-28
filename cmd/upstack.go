@@ -56,7 +56,8 @@ func newUpstackInfoCmd() *cobra.Command {
 					return err
 				}
 			}
-			renderer := ui.New(ui.ColorMode(colorMode))
+			mode := ui.ResolveColorMode(ui.ColorMode(colorMode), cmd.OutOrStdout())
+			renderer := ui.New(mode)
 			out := renderer.RenderForest(forest, ui.ForestRenderOptions{CurrentBranch: currentBranchName, Annotations: annotations})
 
 			fmt.Fprint(cmd.OutOrStdout(), out)

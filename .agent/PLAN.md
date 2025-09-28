@@ -23,7 +23,7 @@ The goal is to replace the existing Python implementation of the `stacky` comman
 - 2025-10-06 – Persisted stack sync progress to state and taught `stacky continue` to resume rebases/merges after conflicts, bringing Go parity with Python’s sync resume flow.
 - [x] Implement GitHub-centric functionality (`inbox`, `prs`, PR creation during `push`) in Go, including wrappers over the `gh` CLI and accompanying tests or fakes.
   - 2025-10-09 – Ported `stacky inbox` and `stacky prs` to Go with lipgloss formatting, `gh` CLI wrappers, and regression coverage for PR creation during push.
-- [ ] Add parity and regression tests plus end-to-end smoke scripts to ensure the Go binary matches Python behavior on representative repository fixtures.
+- [x] Add parity and regression tests plus end-to-end smoke scripts to ensure the Go binary matches Python behavior on representative repository fixtures.
   - 2025-09-30 – Added an initial CLI smoke test for `stacky stack info` in `internal/e2e`, including helpers to invoke the Cobra root command against temporary git fixtures.
   - 2025-10-01 – Added `TestStackSyncRebasesStack` end-to-end test covering `stacky stack sync` rebase flows and parent ref updates.
   - 2025-10-08 – Added `TestStackPushPushesBranches` end-to-end test verifying `stacky stack push --no-pr --force` pushes stack branches to a bare remote and reports the planned actions.
@@ -41,8 +41,12 @@ The goal is to replace the existing Python implementation of the `stacky` comman
   - 2025-10-20 – Added `TestImportSetsParentRefsAndConfig` end-to-end test ensuring `stacky import` wires parent refs and git config from Graphite PR metadata.
   - 2025-10-21 – Added `TestStackCheckoutInteractiveSelection` end-to-end test verifying interactive stack checkout selects the chosen branch and renders the prompt.
   - 2025-10-22 – Added `TestBranchCommitCreatesBranchAndCommitsChanges` end-to-end test verifying `stacky branch commit --add-all` creates the branch, commits changes, and records the parent ref.
+  - 2025-09-27 – Added `TestDownMovesToParentBranch`, `TestDownFailsAtBottom`, `TestUpMovesToChildBranch`, and `TestUpFailsWithoutChildren` end-to-end tests covering root navigation commands.
+  - 2025-10-23 – Added `tools/smoke.sh` with a Bazel `//:smoke_tests` wrapper to run curated internal/e2e flows as an end-to-end smoke check.
 - [x] Replace packaging, entry points, and documentation so the Go binary becomes the primary deliverable while leaving migration notes for any remaining Python components.
   - 2025-10-07 – Added a Bazel `genrule` and `sh_test` that build and exercise the Go CLI, rewrote README installation guidance to centre the Go binary, renamed Python Bazel targets to `legacy_*`, and introduced a runtime deprecation warning for the Python entry point.
+  - 2025-10-24 – Updated GitHub Actions workflows to run Go tests, execute Bazel wrappers against the Go binary, and drop Python packaging from CI.
+  - 2025-10-24 – Added `tools/package_release.sh` plus README guidance so maintainers can build cross-platform Go release artifacts and checksums locally.
 
 ## Surprises & Discoveries
 

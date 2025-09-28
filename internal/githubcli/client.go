@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	api "github.com/cli/go-gh/v2/pkg/api"
@@ -122,6 +123,13 @@ const (
 
 // New constructs a client using shared REST and GraphQL clients configured via go-gh.
 func New() Client {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("STACKY_GITHUB_CLIENT")))
+	if mode == "cli" {
+		if cli, err := newCLIClient(); err == nil {
+			return cli
+		}
+	}
+
 	rest, restErr := api.DefaultRESTClient()
 	gql, gqlErr := api.DefaultGraphQLClient()
 	repo, repoErr := ghrepo.Current()
@@ -130,6 +138,12 @@ func New() Client {
 	for _, err := range []error{restErr, gqlErr, repoErr} {
 		if err != nil {
 			initErr = errors.Join(initErr, err)
+		}
+	}
+
+	if initErr != nil && mode != "rest" {
+		if cli, err := newCLIClient(); err == nil {
+			return cli
 		}
 	}
 

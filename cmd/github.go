@@ -44,7 +44,8 @@ func newInboxCmd() *cobra.Command {
 			}
 
 			compact, _ := cmd.Flags().GetBool("compact")
-			out, err := renderInbox(ctx, eng, compact, ui.ColorMode(colorMode))
+			mode := ui.ResolveColorMode(ui.ColorMode(colorMode), cmd.OutOrStdout())
+			out, err := renderInbox(ctx, eng, compact, mode)
 			if err != nil {
 				return err
 			}
@@ -236,6 +237,14 @@ func (f *inboxFormatter) styled(text, color string, bold bool) string {
 
 func (f *inboxFormatter) writeStyled(text, color string, bold bool) {
 	if text == "" {
+		return
+	}
+	if strings.HasSuffix(text, "\n") {
+		withoutNewline := strings.TrimSuffix(text, "\n")
+		if withoutNewline != "" {
+			f.write(f.styled(withoutNewline, color, bold))
+		}
+		f.write("\n")
 		return
 	}
 	f.write(f.styled(text, color, bold))

@@ -41,7 +41,8 @@ func newInfoCmd() *cobra.Command {
 				}
 			}
 
-			renderer := ui.New(ui.ColorMode(colorMode))
+			mode := ui.ResolveColorMode(ui.ColorMode(colorMode), cmd.OutOrStdout())
+			renderer := ui.New(mode)
 			out := renderer.RenderForest(forest, ui.ForestRenderOptions{CurrentBranch: currentBranch, Annotations: annotations})
 
 			fmt.Fprint(cmd.OutOrStdout(), out)
