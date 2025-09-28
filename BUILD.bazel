@@ -40,6 +40,20 @@ sh_test(
 )
 
 
+sh_test(
+    name = "smoke_tests",
+    srcs = ["tools/smoke.sh"],
+    data = [
+        "go.mod",
+        "go.sum",
+    ] + glob([
+        "*.go",
+        "cmd/**/*.go",
+        "internal/**/*.go",
+    ]),
+)
+
+
 py_binary_xar(
     name = "legacy_stacky.xar",
     main = ":legacy_stacky",

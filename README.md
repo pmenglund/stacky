@@ -20,6 +20,17 @@ bazel test  //:go_tests    # runs go test ./...
 
 Both commands respect local module caches in `.gocache/` so they can run without network access after the first dependency fetch.
 
+## Releasing
+
+Maintainers can generate release artifacts for multiple platforms with `./tools/package_release.sh <version>`.
+This script cross-compiles the Go CLI for Linux (amd64/arm64), macOS (amd64/arm64), and Windows (amd64),
+producing `.tar.gz` or `.zip` archives under `dist/` alongside a `SHA256SUMS` file.
+Pass the version tag you plan to release (for example `v1.2.3`) to ensure the archive names match the published assets.
+
+GitHub Releases are automated. Pushing a tag matching `v*` triggers the `Act on release created` workflow,
+which runs the same cross-compilation matrix, uploads the archives, generates checksums, and attaches everything
+as draft assets on the release for final review.
+
 ### Legacy Python CLI (deprecated)
 
 The historical Python implementation remains available for short-term migration needs. It is no longer the primary deliverable and will be removed in a future release.
@@ -42,8 +53,8 @@ activate-global-python-argcomplete  # one-time setup
 
 Alternatively, enable it per shell session with `eval "$(register-python-argcomplete stacky)"`.
 
-## Accessing Github
-Stacky doesn't use any git or Github APIs. It expects `git` and `gh` cli commands to work and be properly configured. For instructions on installing the github cli `gh` please read their [documentation](https://cli.github.com/manual/).
+## Accessing GitHub
+Stacky speaks to GitHub directly through the official REST and GraphQL APIs via the `go-gh` client. You still need a working `git` binary, but you no longer need the `gh` executable on your `PATH`. Authentication reuses the GitHub CLI configuration (`~/.config/gh/hosts.yml`), so run `gh auth login` once or manage the file manually, and Stacky will pick up the stored token. For GitHub Enterprise instances, set the usual `GH_HOST` and related environment variables before running Stacky.
 
 ## Usage
 `stacky` stores all information locally, within your git repository
