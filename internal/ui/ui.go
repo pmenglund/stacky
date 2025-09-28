@@ -11,7 +11,7 @@ import (
 	"github.com/pmenglund/stacky/internal/stackgraph"
 )
 
-// ColorMode mirrors the CLI flag controlling ANSI colour output.
+// ColorMode mirrors the CLI flag controlling ANSI color output.
 type ColorMode string
 
 const (
@@ -39,7 +39,7 @@ type ForestRenderOptions struct {
 	Annotations map[string]string
 }
 
-// New constructs a Renderer using the provided colour mode.
+// New constructs a Renderer using the provided color mode.
 func New(mode ColorMode) *Renderer {
 	gloss := lipgloss.NewRenderer(io.Discard)
 

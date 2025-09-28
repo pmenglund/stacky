@@ -11,7 +11,7 @@ type fdWriter interface {
 	Fd() uintptr
 }
 
-// ResolveColorMode converts a requested colour mode into the actual mode that
+// ResolveColorMode converts a requested color mode into the actual mode that
 // should be used for the provided writer. When "auto" is requested we only
 // enable ANSI styling if the writer is a terminal and NO_COLOR is not set.
 func ResolveColorMode(requested ColorMode, writer io.Writer) ColorMode {
