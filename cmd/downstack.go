@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/pmenglund/stacky/internal/ui"
@@ -57,7 +55,7 @@ func newDownstackInfoCmd() *cobra.Command {
 			renderer := ui.New(mode)
 			out := renderer.RenderForest(forest, ui.ForestRenderOptions{CurrentBranch: currentBranchName, Annotations: annotations})
 
-			fmt.Fprint(cmd.OutOrStdout(), out)
+			cmd.Print(out)
 			return nil
 		},
 	}

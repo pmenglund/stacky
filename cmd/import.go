@@ -48,7 +48,7 @@ func runImport(cmd *cobra.Command, eng importEngine, branch string, force bool) 
 		fmt.Fprintf(cmd.ErrOrStderr(), "Getting PR information for %s\n", lookup)
 	}
 
-	fmt.Fprint(cmd.OutOrStdout(), renderImportPlan(plan))
+	cmd.Print(renderImportPlan(plan))
 
 	if len(plan.Actions) == 0 {
 		return nil

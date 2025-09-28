@@ -43,8 +43,7 @@ func runUpdateFlow(cmd *cobra.Command, eng updateEngine, remote string, force bo
 		return err
 	}
 
-	out := cmd.OutOrStdout()
-	fmt.Fprint(out, renderUpdatePlan(plan))
+	cmd.Print(renderUpdatePlan(plan))
 
 	if !updatePlanHasWork(plan) {
 		return nil

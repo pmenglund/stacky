@@ -27,7 +27,7 @@ func runPushFlow(cmd *cobra.Command, eng pushExecutor, remote string, includePR 
 		return err
 	}
 
-	fmt.Fprint(cmd.OutOrStdout(), renderPushPlan(plan))
+	cmd.Print(renderPushPlan(plan))
 
 	if !planRequiresWork(plan) {
 		return nil
@@ -101,11 +101,10 @@ func confirmProceed(cmd *cobra.Command) error {
 	}
 
 	reader := bufio.NewReader(in)
-	out := cmd.OutOrStdout()
-	fmt.Fprintln(out)
+	cmd.Println()
 
 	for {
-		fmt.Fprint(out, "Proceed? [yes/no] ")
+		cmd.Print("Proceed? [yes/no] ")
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			return err
@@ -117,7 +116,7 @@ func confirmProceed(cmd *cobra.Command) error {
 		case "n", "no":
 			return fmt.Errorf("not confirmed")
 		default:
-			fmt.Fprintln(out, "Please answer yes or no")
+			cmd.Println("Please answer yes or no")
 		}
 	}
 }

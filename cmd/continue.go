@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +20,7 @@ func newContinueCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Resumed on branch %s\n", branch)
+			cmd.Printf("Resumed on branch %s\n", branch)
 			return nil
 		},
 	}

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +20,7 @@ func newLogCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprint(cmd.OutOrStdout(), out)
+			cmd.Print(out)
 			return nil
 		},
 	}

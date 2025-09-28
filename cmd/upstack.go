@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -60,7 +59,7 @@ func newUpstackInfoCmd() *cobra.Command {
 			renderer := ui.New(mode)
 			out := renderer.RenderForest(forest, ui.ForestRenderOptions{CurrentBranch: currentBranchName, Annotations: annotations})
 
-			fmt.Fprint(cmd.OutOrStdout(), out)
+			cmd.Print(out)
 			return nil
 		},
 	}

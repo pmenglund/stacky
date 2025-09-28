@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -22,11 +20,10 @@ func newLandCmd() *cobra.Command {
 				return err
 			}
 
-			out := cmd.OutOrStdout()
 			if plan.BranchCount > 1 {
-				fmt.Fprintf(out, "The `land` command only lands the bottom-most branch %s; the current stack has %d branches, ending with %s\n", plan.Branch, plan.BranchCount, plan.CurrentBranch)
+				cmd.Printf("The `land` command only lands the bottom-most branch %s; the current stack has %d branches, ending with %s\n", plan.Branch, plan.BranchCount, plan.CurrentBranch)
 			}
-			fmt.Fprintf(out, "- Will land PR #%d (%s) for branch %s into branch %s\n", plan.PRNumber, plan.PRURL, plan.Branch, plan.Parent)
+			cmd.Printf("- Will land PR #%d (%s) for branch %s into branch %s\n", plan.PRNumber, plan.PRURL, plan.Branch, plan.Parent)
 
 			force, _ := cmd.Flags().GetBool("force")
 			if !force && !eng.Config().SkipConfirm {
@@ -40,7 +37,8 @@ func newLandCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprint(out, "\n✓ Success! Run `stacky update` to update local state.\n")
+			cmd.Println()
+			cmd.Println("✓ Success! Run `stacky update` to update local state.")
 			return nil
 		},
 	}

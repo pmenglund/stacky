@@ -54,7 +54,7 @@ func runPrs(cmd *cobra.Command, eng prsEngine) error {
 
 	prs := mergePullRequests(authored, review)
 	if len(prs) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "No active pull requests found.")
+		cmd.Println("No active pull requests found.")
 		return nil
 	}
 
@@ -105,19 +105,19 @@ func mergePullRequests(a, b []githubcli.PullRequest) []githubcli.PullRequest {
 }
 
 func selectPullRequest(cmd *cobra.Command, prs []githubcli.PullRequest) (index int, exit bool, err error) {
-	out := cmd.OutOrStdout()
 	reader := bufio.NewReader(cmd.InOrStdin())
 
-	fmt.Fprintln(out, "\nSelect a pull request to edit its description:")
+	cmd.Println()
+	cmd.Println("Select a pull request to edit its description:")
 
 	for i, pr := range prs {
 		title := pr.Title
 		if strings.TrimSpace(title) == "" {
 			title = "(no title)"
 		}
-		fmt.Fprintf(out, "  %d) #%d %s\n", i+1, pr.Number, title)
+		cmd.Printf("  %d) #%d %s\n", i+1, pr.Number, title)
 	}
-	fmt.Fprintln(out, "  0) Exit")
+	cmd.Println("  0) Exit")
 
 	numberToIndex := make(map[int]int, len(prs))
 	for i, pr := range prs {
@@ -127,7 +127,7 @@ func selectPullRequest(cmd *cobra.Command, prs []githubcli.PullRequest) (index i
 	}
 
 	for {
-		fmt.Fprint(out, "> ")
+		cmd.Print("> ")
 		line, readErr := reader.ReadString('\n')
 		if readErr != nil {
 			return 0, false, readErr
@@ -155,22 +155,20 @@ func selectPullRequest(cmd *cobra.Command, prs []githubcli.PullRequest) (index i
 				return idx, false, nil
 			}
 		}
-		fmt.Fprintf(out, "Invalid selection %q. Enter list number, PR number, or 0 to exit.\n", line)
+		cmd.Printf("Invalid selection %q. Enter list number, PR number, or 0 to exit.\n", line)
 	}
 }
 
 func editPullRequest(cmd *cobra.Command, eng prsEngine, pr *githubcli.PullRequest) error {
-	out := cmd.OutOrStdout()
-
-	fmt.Fprintf(out, "\nEditing PR #%d - %s\n", pr.Number, pr.Title)
-	fmt.Fprintln(out, "Current description:")
+	cmd.Printf("\nEditing PR #%d - %s\n", pr.Number, pr.Title)
+	cmd.Println("Current description:")
 
 	original := pr.Body
 	if strings.TrimSpace(original) == "" {
-		fmt.Fprintln(out, "(No description)")
-		fmt.Fprintln(out)
+		cmd.Println("(No description)")
+		cmd.Println()
 	} else {
-		fmt.Fprintf(out, "%s\n\n", original)
+		cmd.Printf("%s\n\n", original)
 	}
 
 	tempFile, err := os.CreateTemp("", "stacky-pr-*.md")
@@ -204,17 +202,17 @@ func editPullRequest(cmd *cobra.Command, eng prsEngine, pr *githubcli.PullReques
 	}
 	newBody := strings.TrimSpace(string(contents))
 	if strings.TrimSpace(original) == newBody {
-		fmt.Fprintln(out, "No changes made to PR description.")
+		cmd.Println("No changes made to PR description.")
 		return nil
 	}
 
-	fmt.Fprintln(out, "Updating PR description...")
+	cmd.Println("Updating PR description...")
 	if err := eng.UpdatePRBody(cmd.Context(), pr.Number, newBody); err != nil {
 		return err
 	}
 
 	pr.Body = newBody
-	fmt.Fprintf(out, "✓ Successfully updated PR #%d description\n", pr.Number)
+	cmd.Printf("✓ Successfully updated PR #%d description\n", pr.Number)
 	return nil
 }
 

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +41,7 @@ func runDown(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Checked out %s\n", target)
+	cmd.Printf("Checked out %s\n", target)
 	return nil
 }
 
@@ -68,6 +66,6 @@ func runUp(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Checked out %s\n", target)
+	cmd.Printf("Checked out %s\n", target)
 	return nil
 }
