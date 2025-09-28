@@ -67,6 +67,47 @@ func TestReadRefMissingReturnsEmpty(t *testing.T) {
 	require.Empty(t, value)
 }
 
+func TestInitCreatesRepository(t *testing.T) {
+	ctx := context.Background()
+	repoPath := filepath.Join(t.TempDir(), "repo")
+
+	repo, err := gitstore.Init(ctx, repoPath)
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+
+	abs, err := filepath.Abs(repoPath)
+	require.NoError(t, err)
+	root := repo.Root()
+	rootReal, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	absReal, err := filepath.EvalSymlinks(abs)
+	require.NoError(t, err)
+	require.Equal(t, absReal, rootReal)
+
+	info, err := os.Stat(filepath.Join(abs, ".git"))
+	require.NoError(t, err)
+	require.True(t, info.IsDir(), "expected .git to be a directory")
+
+	_, err = repo.Run(ctx, "config", "user.email", "test@example.com")
+	require.NoError(t, err)
+	_, err = repo.Run(ctx, "config", "user.name", "Test User")
+	require.NoError(t, err)
+	_, err = repo.Run(ctx, "config", "commit.gpgsign", "false")
+	require.NoError(t, err)
+
+	readme := filepath.Join(abs, "README.md")
+	require.NoError(t, os.WriteFile(readme, []byte("hello"), 0o644))
+
+	_, err = repo.Run(ctx, "add", "README.md")
+	require.NoError(t, err)
+	_, err = repo.Run(ctx, "commit", "-m", "initial commit")
+	require.NoError(t, err)
+
+	head, err := repo.HeadCommit(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, head)
+}
+
 func TestOpenFailsOutsideRepo(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

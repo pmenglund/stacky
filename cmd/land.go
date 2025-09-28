@@ -1,12 +1,48 @@
 package cmd
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
 
 func newLandCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "land",
 		Short: "Land bottom-most PR on current stack",
-		RunE:  notImplemented("land"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			eng, err := newEngine(ctx)
+			if err != nil {
+				return err
+			}
+
+			plan, err := eng.PlanLand(ctx)
+			if err != nil {
+				return err
+			}
+
+			out := cmd.OutOrStdout()
+			if plan.BranchCount > 1 {
+				fmt.Fprintf(out, "The `land` command only lands the bottom-most branch %s; the current stack has %d branches, ending with %s\n", plan.Branch, plan.BranchCount, plan.CurrentBranch)
+			}
+			fmt.Fprintf(out, "- Will land PR #%d (%s) for branch %s into branch %s\n", plan.PRNumber, plan.PRURL, plan.Branch, plan.Parent)
+
+			force, _ := cmd.Flags().GetBool("force")
+			if !force && !eng.Config().SkipConfirm {
+				if err := confirmProceed(cmd); err != nil {
+					return err
+				}
+			}
+
+			auto, _ := cmd.Flags().GetBool("auto")
+			if err := eng.ExecuteLand(ctx, plan, auto); err != nil {
+				return err
+			}
+
+			fmt.Fprint(out, "\n✓ Success! Run `stacky update` to update local state.\n")
+			return nil
+		},
 	}
 	cmd.Flags().BoolP("force", "f", false, "bypass confirmation")
 	cmd.Flags().BoolP("auto", "a", false, "automatically merge after checks pass")

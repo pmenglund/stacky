@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -106,22 +107,36 @@ func newUpstackSyncCmd() *cobra.Command {
 }
 
 func newUpstackOntoCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:     "onto",
 		Aliases: []string{"restack"},
 		Short:   "Restack",
-		RunE:    notImplemented("upstack onto"),
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			eng, err := newEngine(ctx)
+			if err != nil {
+				return err
+			}
+			target := strings.TrimSpace(args[0])
+			return eng.UpstackOnto(ctx, target)
+		},
 	}
-	cmd.Args = cobra.ExactArgs(1)
-	return cmd
 }
 
 func newUpstackAsCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "as",
 		Short: "Upstack branch this as a new stack bottom",
-		RunE:  notImplemented("upstack as"),
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			eng, err := newEngine(ctx)
+			if err != nil {
+				return err
+			}
+			target := strings.TrimSpace(args[0])
+			return eng.UpstackAs(ctx, target)
+		},
 	}
-	cmd.Args = cobra.ExactArgs(1)
-	return cmd
 }

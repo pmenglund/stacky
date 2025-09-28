@@ -25,8 +25,17 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	expected := state.State{
 		Branch: "feature",
 		Sync:   []string{"a", "b"},
-		Fold: map[string]interface{}{
-			"fold_branch": "feature",
+		Fold: &state.FoldState{
+			FoldBranch:   "feature",
+			ParentBranch: "parent",
+			Commits:      []string{"c1", "c2"},
+			Children:     []string{"child"},
+			AllowEmpty:   true,
+		},
+		MergeFold: &state.MergeFoldState{
+			FoldBranch:   "feature",
+			ParentBranch: "parent",
+			Children:     []string{"child"},
 		},
 	}
 

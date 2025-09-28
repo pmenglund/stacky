@@ -2,14 +2,52 @@ load("@rules_xar//:xarify.bzl", "py_binary_xar")
 load("@rules_python//python/pip_install:requirements.bzl", "compile_pip_requirements")
 load("@pypi//:requirements.bzl", "requirement")
 
+genrule(
+    name = "stacky",
+    srcs = [
+        "go.mod",
+        "go.sum",
+    ] + glob([
+        "*.go",
+        "cmd/**/*.go",
+        "internal/**/*.go",
+    ]),
+    outs = ["stacky"],
+    cmd = (
+        "cd $$BUILD_WORKSPACE_DIRECTORY && "
+        "out=$$BUILD_WORKSPACE_DIRECTORY/$@ && "
+        "dir=$$(dirname $$out) && "
+        "mkdir -p \"$$dir\" \"$$BUILD_WORKSPACE_DIRECTORY/.gocache/mod\" \"$$BUILD_WORKSPACE_DIRECTORY/.gocache/build\" && "
+        "GOMODCACHE=$$BUILD_WORKSPACE_DIRECTORY/.gocache/mod "
+        "GOCACHE=$$BUILD_WORKSPACE_DIRECTORY/.gocache/build "
+        "GOFLAGS=-mod=readonly go build -o \"$$out\" ."
+    ),
+    visibility = ["//visibility:public"],
+)
+
+
+sh_test(
+    name = "go_tests",
+    srcs = ["tools/go_test.sh"],
+    data = [
+        "go.mod",
+        "go.sum",
+    ] + glob([
+        "*.go",
+        "cmd/**/*.go",
+        "internal/**/*.go",
+    ]),
+)
+
+
 py_binary_xar(
-    name = "stacky.xar",
-    main = ":stacky",
+    name = "legacy_stacky.xar",
+    main = ":legacy_stacky",
 )
 
 
 py_binary(
-    name = "stacky",
+    name = "legacy_stacky",
     srcs = ["src/stacky/stacky.py"],
     main = "src/stacky/stacky.py",
     deps = [
@@ -17,7 +55,7 @@ py_binary(
         requirement("simple-term-menu"),
         requirement("asciitree"),
         requirement("argcomplete"),
-    ]
+    ],
 )
 
 exports_files(["requirements.txt"])

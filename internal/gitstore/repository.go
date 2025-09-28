@@ -70,6 +70,28 @@ func Open(ctx context.Context, path string) (*Repository, error) {
 	return &Repository{root: root, runner: &execRunner{dir: root}}, nil
 }
 
+// Init initialises a new git repository at the provided path and returns the
+// opened Repository. The directory is created if it does not exist.
+func Init(ctx context.Context, path string) (*Repository, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("gitstore: resolve path: %w", err)
+	}
+
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return nil, fmt.Errorf("gitstore: create directory %s: %w", abs, err)
+	}
+
+	runner := &execRunner{dir: abs}
+	if _, err := runner.Run(ctx, "git", "init", "-b", "main"); err != nil {
+		if _, fallbackErr := runner.Run(ctx, "git", "init"); fallbackErr != nil {
+			return nil, fmt.Errorf("gitstore: init repository at %s: %w", abs, err)
+		}
+	}
+
+	return Open(ctx, abs)
+}
+
 // Root returns the absolute repository root.
 func (r *Repository) Root() string { return r.root }
 
@@ -126,6 +148,19 @@ func (r *Repository) WriteRef(ctx context.Context, ref, commit, old string) erro
 // Checkout switches the working tree to branch.
 func (r *Repository) Checkout(ctx context.Context, branch string) error {
 	_, err := r.runner.Run(ctx, "git", "checkout", branch)
+	return err
+}
+
+// RebaseOnto rebases the specified branch onto the given commits using
+// `git rebase --onto`. All parameters must be non-empty commit or branch names.
+func (r *Repository) RebaseOnto(ctx context.Context, branch, onto, from string) error {
+	branch = strings.TrimSpace(branch)
+	onto = strings.TrimSpace(onto)
+	from = strings.TrimSpace(from)
+	if branch == "" || onto == "" || from == "" {
+		return fmt.Errorf("gitstore: rebase requires branch, onto, and from refs")
+	}
+	_, err := r.runner.Run(ctx, "git", "rebase", "--onto", onto, from, branch)
 	return err
 }
 

@@ -1,14 +1,12 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/pmenglund/stacky/internal/tui"
 	"github.com/pmenglund/stacky/internal/ui"
 )
 
@@ -174,39 +172,17 @@ func selectBranch(cmd *cobra.Command, options []string, prompt, current string) 
 		return options[0], nil
 	}
 
-	sort.Strings(options)
-	out := cmd.OutOrStdout()
-	reader := bufio.NewReader(cmd.InOrStdin())
-
-	fmt.Fprintf(out, "%s:\n", prompt)
-	for i, opt := range options {
-		marker := ""
-		if opt == current {
-			marker = " *"
-		}
-		fmt.Fprintf(out, "  %d) %s%s\n", i+1, opt, marker)
+	in := cmd.InOrStdin()
+	if !tui.IsTerminal(in) {
+		return "", fmt.Errorf("interactive branch selection requires a terminal; pass the branch name explicitly")
 	}
 
-	for {
-		fmt.Fprint(out, "> ")
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return "", err
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if idx, err := strconv.Atoi(line); err == nil {
-			if idx >= 1 && idx <= len(options) {
-				return options[idx-1], nil
-			}
-		}
-		for _, opt := range options {
-			if opt == line {
-				return opt, nil
-			}
-		}
-		fmt.Fprintf(out, "Invalid selection %q. Enter number or name from list.\n", line)
+	sorted := append([]string(nil), options...)
+	sort.Strings(sorted)
+
+	selection, err := tui.Select(in, cmd.OutOrStdout(), sorted, tui.SelectOptions{Prompt: prompt, Highlight: current})
+	if err != nil {
+		return "", err
 	}
+	return selection, nil
 }

@@ -2267,6 +2267,9 @@ def cmd_prs(stack: StackBranchSet, args):
 
 def main():
     logging.basicConfig(format=_LOGGING_FORMAT, level=logging.INFO)
+    logging.warning(
+        "The legacy Python CLI is deprecated; build the Go binary (go build -o bin/stacky .) for ongoing support."
+    )
     try:
         parser = ArgumentParser(description="Handle git stacks")
         parser.add_argument(

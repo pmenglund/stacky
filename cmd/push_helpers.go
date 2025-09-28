@@ -4,18 +4,23 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/pmenglund/stacky/internal/config"
 	"github.com/pmenglund/stacky/internal/engine"
+	"github.com/pmenglund/stacky/internal/tui"
 )
 
 type pushPlanBuilder func(context.Context, string, bool) (engine.PushPlan, error)
 
-func runPushFlow(cmd *cobra.Command, eng *engine.Engine, remote string, includePR bool, force bool, builder pushPlanBuilder) error {
+type pushExecutor interface {
+	Config() config.Config
+	ExecutePushPlan(context.Context, engine.PushPlan) error
+}
+
+func runPushFlow(cmd *cobra.Command, eng pushExecutor, remote string, includePR bool, force bool, builder pushPlanBuilder) error {
 	ctx := cmd.Context()
 	plan, err := builder(ctx, remote, includePR)
 	if err != nil {
@@ -29,7 +34,7 @@ func runPushFlow(cmd *cobra.Command, eng *engine.Engine, remote string, includeP
 	}
 
 	if !force && !eng.Config().SkipConfirm {
-		if err := confirmPush(cmd); err != nil {
+		if err := confirmProceed(cmd); err != nil {
 			return err
 		}
 	}
@@ -89,9 +94,9 @@ func renderPushPlan(plan engine.PushPlan) string {
 	return b.String()
 }
 
-func confirmPush(cmd *cobra.Command) error {
+func confirmProceed(cmd *cobra.Command) error {
 	in := cmd.InOrStdin()
-	if !isTerminal(in) {
+	if !tui.IsTerminal(in) {
 		return fmt.Errorf("standard input is not a terminal; use --force to skip confirmation")
 	}
 
@@ -115,17 +120,4 @@ func confirmPush(cmd *cobra.Command) error {
 			fmt.Fprintln(out, "Please answer yes or no")
 		}
 	}
-}
-
-func isTerminal(reader io.Reader) bool {
-	file, ok := reader.(*os.File)
-	if !ok {
-		// Treat non-file readers as interactive to support tests.
-		return true
-	}
-	info, err := file.Stat()
-	if err != nil {
-		return true
-	}
-	return (info.Mode() & os.ModeCharDevice) != 0
 }

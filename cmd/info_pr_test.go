@@ -31,6 +31,36 @@ func (f *fakeGitHubClient) CreatePR(context.Context, githubcli.CreateParams) err
 
 func (f *fakeGitHubClient) EditPRBase(context.Context, int, string) error { return nil }
 
+func (f *fakeGitHubClient) EditPRBody(context.Context, int, string) error { return nil }
+
+func (f *fakeGitHubClient) MergePR(context.Context, githubcli.MergeParams) error { return nil }
+
+func (f *fakeGitHubClient) GetPRForBranch(_ context.Context, params githubcli.GetPRParams) (githubcli.BranchPullRequests, error) {
+	if f.err != nil {
+		return githubcli.BranchPullRequests{}, f.err
+	}
+	all := make(map[string]githubcli.PullRequest)
+	var open *githubcli.PullRequest
+	for i := range f.prs {
+		pr := f.prs[i]
+		if params.Branch != "" && pr.HeadRef != params.Branch {
+			continue
+		}
+		if pr.ID != "" {
+			all[pr.ID] = pr
+		}
+		if open == nil {
+			copy := pr
+			open = &copy
+		}
+	}
+	return githubcli.BranchPullRequests{All: all, Open: open}, nil
+}
+
+func (f *fakeGitHubClient) UpdateReviewers(context.Context, githubcli.UpdateReviewersParams) error {
+	return nil
+}
+
 func runInfoCommandWithPRs(t *testing.T, factory func() *cobra.Command, repoDir, home string, prs []githubcli.PullRequest) string {
 	t.Helper()
 

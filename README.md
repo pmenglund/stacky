@@ -1,67 +1,46 @@
-`stacky` is a homebrewed tool to manage stacks of PRs. This allows developers to easily manage many smaller, more targeted PRs that depend on each other.
+`stacky` is a homebrewed tool to manage stacks of PRs. This allows developers to easily manage many smaller, more targeted PRs that depend on each other. The primary implementation is now a single statically linked Go binary that mirrors the original Python behaviour.
 
 
 ## Installation
-You now have the choice on how to do that, we build pre-packaged version of stacky on new releases, they can be found on the [releases](https://github.com/rockset/stacky/releases) page and we also publish a package in `pypi`.
 
-### Pre-packaged
+### Build from source (Go)
 
-Using `bazel` we provide pre-packaged version, they are self contained and don't require the installation of external modules. Just drop them in a directory that is part of the `$PATH` environment variable make it executable and you are good to go.
+1. Ensure Go 1.25 or newer is installed.
+2. Clone this repository and change into it.
+3. Build the binary: `go build -o bin/stacky .`
+4. Add the `bin/` directory to your `PATH`, or copy `bin/stacky` to a directory that is already on your `PATH`.
+5. Verify the installation with `stacky --help`.
 
-There is also a [xar](https://github.com/facebookincubator/xar/) version it should be faster to run but requires to have `xarexec_fuse` installed.
+The repository also provides Bazel targets that build and test the Go CLI:
 
-### Pip
-```
-1. Clone this repository
-2. From this repository root run `pip install -e .`
-```
-
-### Manual
-`stacky` requires the following python3 packages installed on the host 
-1. asciitree
-2. ansicolors
-3. simple-term-menu
-4. argcomplete (for tab completion)
-```
-pip3 install asciitree ansicolors simple-term-menu argcomplete
-```
-
-After which `stacky` can be directly run with `./src/stacky/stacky.py`. We would recommend symlinking `stacky.py` into your path so you can use it anywhere
-
-## Tab Completion
-
-Stacky supports tab completion for branch names in bash and zsh. To enable it:
-
-### One-time setup
 ```bash
-# Install argcomplete
+bazel build //:stacky      # produces bazel-bin/stacky
+bazel test  //:go_tests    # runs go test ./...
+```
+
+Both commands respect local module caches in `.gocache/` so they can run without network access after the first dependency fetch.
+
+### Legacy Python CLI (deprecated)
+
+The historical Python implementation remains available for short-term migration needs. It is no longer the primary deliverable and will be removed in a future release.
+
+- Editable install: clone the repository and run `pip install -e .`.
+- Manual execution: install `asciitree`, `ansicolors`, `simple-term-menu`, and `argcomplete`, then run `./src/stacky/stacky.py`.
+- Bazel packaging: `bazel build //:legacy_stacky` (binary) or `bazel build //:legacy_stacky.xar`.
+- Uninstall when you migrate: `pip uninstall rockset-stacky`.
+
+Shell completion instructions in the sections below apply only to the legacy Python CLI. The Go CLI will gain native Cobra-powered completion in a later update.
+
+## Tab Completion (legacy Python CLI)
+
+Tab completion is available only for the legacy Python command through `argcomplete`:
+
+```bash
 pip3 install argcomplete
-
-# Enable global completion (recommended)
-activate-global-python-argcomplete
+activate-global-python-argcomplete  # one-time setup
 ```
 
-### Per-session setup (alternative)
-If you prefer not to use global completion, you can enable it per session:
-```bash
-# For bash/zsh
-eval "$(register-python-argcomplete stacky)"
-```
-
-### Permanent setup (alternative)
-Add the completion to your shell config:
-```bash
-# For bash - add to ~/.bashrc
-eval "$(register-python-argcomplete stacky)"
-
-# For zsh - add to ~/.zshrc  
-eval "$(register-python-argcomplete stacky)"
-```
-
-After setup, you can use tab completion with commands like:
-- `stacky checkout <TAB>` - completes branch names
-- `stacky adopt <TAB>` - completes branch names
-- `stacky branch checkout <TAB>` - completes branch names
+Alternatively, enable it per shell session with `eval "$(register-python-argcomplete stacky)"`.
 
 ## Accessing Github
 Stacky doesn't use any git or Github APIs. It expects `git` and `gh` cli commands to work and be properly configured. For instructions on installing the github cli `gh` please read their [documentation](https://cli.github.com/manual/).

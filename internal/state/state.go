@@ -9,10 +9,26 @@ import (
 
 // State mirrors the JSON structure written by the legacy Python tool.
 type State struct {
-	Branch    string      `json:"branch"`
-	Sync      []string    `json:"sync,omitempty"`
-	Fold      interface{} `json:"fold,omitempty"`
-	MergeFold interface{} `json:"merge_fold,omitempty"`
+	Branch    string          `json:"branch"`
+	Sync      []string        `json:"sync,omitempty"`
+	Fold      *FoldState      `json:"fold,omitempty"`
+	MergeFold *MergeFoldState `json:"merge_fold,omitempty"`
+}
+
+// FoldState captures progress for cherry-pick based fold operations.
+type FoldState struct {
+	FoldBranch   string   `json:"fold_branch"`
+	ParentBranch string   `json:"parent_branch"`
+	Commits      []string `json:"commits,omitempty"`
+	Children     []string `json:"children,omitempty"`
+	AllowEmpty   bool     `json:"allow_empty,omitempty"`
+}
+
+// MergeFoldState captures progress for merge based fold operations.
+type MergeFoldState struct {
+	FoldBranch   string   `json:"fold_branch"`
+	ParentBranch string   `json:"parent_branch"`
+	Children     []string `json:"children,omitempty"`
 }
 
 // Load reads state from disk. If the file does not exist an empty State and nil

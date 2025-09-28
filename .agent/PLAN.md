@@ -11,15 +11,45 @@ The goal is to replace the existing Python implementation of the `stacky` comman
 - [x] Audit the Python CLI to catalog every command, flag, config knob, external dependency, and file it touches, recording the results in this plan (see “Python CLI Audit – 2024-04-07”).
 - [x] Design and scaffold the Go module layout, Cobra command tree, and supporting packages for configuration, git access, GitHub integration, and terminal rendering (see “Go Implementation Blueprint – 2024-04-07”).
 - [x] Implement core domain packages (stack graph model, repository helpers, config loader, and state persistence) and cover them with unit tests using `testify` (config loader, git repository helpers, stack graph builder, and state persistence implemented with `require`-based tests).
-- [ ] Port interactive and non-interactive commands (`info`, `stack sync`, `branch` subcommands, commit helpers, and tree printers) to Go, using `go-git` and `lipgloss` where appropriate (`info` scopes render via lipgloss; checkout/commit flows handle CLI flags and interactive prompts; `stacky log`, `stacky continue`, `stacky update`, `stacky stack sync`, `stacky stack push`, and `--pr` annotations now go through engine helpers; remaining menus, push PR flows, and advanced sync scenarios still TODO).
-- [ ] Implement GitHub-centric functionality (`inbox`, `prs`, PR creation during `push`) in Go, including wrappers over the `gh` CLI and accompanying tests or fakes.
+- [x] Port interactive and non-interactive commands (`info`, `stack sync`, `branch` subcommands, commit helpers, and tree printers) to Go, using `go-git` and `lipgloss` where appropriate (`info` scopes render via lipgloss; checkout/commit flows handle CLI flags and interactive prompts; `stacky log`, `stacky continue`, `stacky update`, `stacky stack sync`, `stacky stack push`, and `--pr` annotations go through engine helpers; branch selection menus now share a reusable TUI helper mirroring the Python TerminalMenu flow).
+  - 2024-04-07 – Ported `stacky adopt` to Go (engine + Cobra command) with regression tests covering config toggles and stack-parent wiring.
+  - 2025-09-27 – Ported `stacky prs` to Go with interactive selection, default editor integration, and regression tests covering menu flows and PR body updates.
+  - 2025-09-28 – Ported `stacky land` to Go with engine planning/merge execution, CLI confirmation flow, and tests covering GitHub merge invocation and remote sync validation.
+  - 2025-09-29 – Implemented `stacky upstack onto`/`stacky upstack as` in Go, wiring CLI commands to engine reparenting logic with regression tests for restack validation and stack-bottom promotion.
+  - 2025-10-02 – Ported `stacky update` to Go with plan/execute workflow, branch deletion parity, confirmation prompts, and engine tests covering merged PR cleanup.
+  - 2025-10-05 – Aligned `stacky push --pr` with Python by updating stack comment automation in Go, generating structured PR body summaries for pushed stacks and covering the behavior with engine tests.
+  - 2025-10-13 – Consolidated branch-selection prompts around `internal/tui.Select`, enforcing terminal detection and reusing the interactive menu across checkout flows.
+- 2025-09-27 – Added fold resume support to Engine/Continue, covering cherry-pick and merge folds with regression tests.
+- 2025-10-06 – Persisted stack sync progress to state and taught `stacky continue` to resume rebases/merges after conflicts, bringing Go parity with Python’s sync resume flow.
+- [x] Implement GitHub-centric functionality (`inbox`, `prs`, PR creation during `push`) in Go, including wrappers over the `gh` CLI and accompanying tests or fakes.
+  - 2025-10-09 – Ported `stacky inbox` and `stacky prs` to Go with lipgloss formatting, `gh` CLI wrappers, and regression coverage for PR creation during push.
 - [ ] Add parity and regression tests plus end-to-end smoke scripts to ensure the Go binary matches Python behavior on representative repository fixtures.
-- [ ] Replace packaging, entry points, and documentation so the Go binary becomes the primary deliverable while leaving migration notes for any remaining Python components.
+  - 2025-09-30 – Added an initial CLI smoke test for `stacky stack info` in `internal/e2e`, including helpers to invoke the Cobra root command against temporary git fixtures.
+  - 2025-10-01 – Added `TestStackSyncRebasesStack` end-to-end test covering `stacky stack sync` rebase flows and parent ref updates.
+  - 2025-10-08 – Added `TestStackPushPushesBranches` end-to-end test verifying `stacky stack push --no-pr --force` pushes stack branches to a bare remote and reports the planned actions.
+  - 2025-10-09 – Added `TestStackPushCreatesPullRequests` end-to-end test that stubs the `gh` binary to assert PR creation flow during `stacky stack push --force`.
+  - 2025-10-10 – Added `TestContinueResumesStackSyncAfterConflict` end-to-end test to verify `stacky continue` resumes a rebasing stack after conflicts.
+  - 2025-10-11 – Added `TestStackUpdateDeletesMergedBranch` end-to-end test covering `stacky update --force` branch deletion, reparenting, and bottom fast-forward parity.
+  - 2025-10-14 – Added `TestLogRespectsUseMergeConfig` end-to-end test asserting `stacky log` matches `git log` output and honors the `[GIT].use_merge` configuration toggle.
+  - 2025-10-12 – Added `TestLandMergesPullRequest` end-to-end test validating `stacky land` merges the bottom branch via stubbed gh interactions and prompts for confirmation output.
+  - 2025-10-14 – Added `TestAdoptWiresExistingBranchIntoStack` end-to-end test to cover adopting existing branches into a stack and verifying git config wiring.
+  - 2025-10-15 – Added `TestInboxRendersAuthoredAndReviewSections` end-to-end test covering `stacky inbox --compact` rendering with stubbed gh responses for authored and review queues.
+  - 2025-10-16 – Added `TestPrsAllowsEditingPullRequest` end-to-end test validating interactive PR selection and description editing through the fake gh CLI and editor hooks.
+  - 2025-10-17 – Added `TestFoldCherryPicksCommitsAndDeletesBranch` end-to-end test validating `stacky fold` cherry-picks, deletes the folded branch, and clears persisted state.
+  - 2025-10-18 – Added `TestUpstackOntoRestacksCurrentBranch` and `TestUpstackAsPromotesBranchToBottom` end-to-end tests covering `stacky upstack onto` and `stacky upstack as bottom` restack flows.
+  - 2025-10-19 – Added `TestDownstackInfoShowsAncestorsPath` end-to-end test verifying `stacky downstack info` renders the ancestor path without including sibling branches.
+  - 2025-10-20 – Added `TestImportSetsParentRefsAndConfig` end-to-end test ensuring `stacky import` wires parent refs and git config from Graphite PR metadata.
+  - 2025-10-21 – Added `TestStackCheckoutInteractiveSelection` end-to-end test verifying interactive stack checkout selects the chosen branch and renders the prompt.
+  - 2025-10-22 – Added `TestBranchCommitCreatesBranchAndCommitsChanges` end-to-end test verifying `stacky branch commit --add-all` creates the branch, commits changes, and records the parent ref.
+- [x] Replace packaging, entry points, and documentation so the Go binary becomes the primary deliverable while leaving migration notes for any remaining Python components.
+  - 2025-10-07 – Added a Bazel `genrule` and `sh_test` that build and exercise the Go CLI, rewrote README installation guidance to centre the Go binary, renamed Python Bazel targets to `legacy_*`, and introduced a runtime deprecation warning for the Python entry point.
 
 ## Surprises & Discoveries
 
 - 2024-04-07 – Local git configuration enables `core.fsmonitor`, which prints `error: daemon terminated` during status checks and tests.
   Mitigation: disable fsmonitor inside test repositories until the engine handles external fsmonitor hooks gracefully.
+- 2025-10-07 – Running `bazel` inside the sandboxed environment fails because the dotslash wrapper cannot create directories under `~/Library/Caches`.
+  Mitigation: rely on `go build` / `go test` locally, or configure the wrapper to use a writable cache directory before invoking the Bazel targets.
 
 ## Decision Log
 
@@ -29,6 +59,10 @@ The goal is to replace the existing Python implementation of the `stacky` comman
 - Decision: Wrap the `gh` CLI via an injectable runner rather than importing GitHub SDKs.
   Rationale: Maintains parity with the Python tool, avoids new dependencies under network restrictions, and keeps tests hermetic by faking command output.
   Date/Author: 2024-04-07 / Codex
+
+- Decision: Build the Go binary through a Bazel `genrule` that shells out to `go build` instead of introducing `rules_go`.
+  Rationale: Existing sandbox and network restrictions prevent downloading additional Bazel rulesets; invoking the Go toolchain directly keeps packaging reproducible with the dependencies already vendored locally.
+  Date/Author: 2025-10-07 / Codex
 
 ## Outcomes & Retrospective
 
@@ -170,3 +204,5 @@ Update – 2024-04-07 (Codex): Documented the Python CLI audit and advanced Prog
 Update – 2024-04-07 (Codex): Added Go Implementation Blueprint and marked design milestone complete.
 Update – 2024-04-07 (Codex): Outlined core domain implementation roadmap to guide next milestone.
 Update – 2024-04-07 (Codex): Bootstrapped Go module, CLI skeleton, and internal package stubs to start implementation.
+
+Update – 2025-10-06 (Codex): Documented stack sync resume support in Progress after implementing state persistence and continue handling.

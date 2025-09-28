@@ -12,30 +12,30 @@ var (
 	remoteName string
 )
 
-// RootCmd represents the base command invoked without subcommands.
-var RootCmd = &cobra.Command{
-	Use:   "stacky",
-	Short: "Manage stacks of git branches and pull requests",
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if err := validateLogLevel(logLevel); err != nil {
-			return err
-		}
-		if err := validateColorMode(colorMode); err != nil {
-			return err
-		}
-		if remoteName == "" {
-			return fmt.Errorf("remote name must not be empty")
-		}
-		return nil
-	},
-}
+// NewRootCommand constructs a fully wired Cobra root command for stacky.
+func NewRootCommand() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "stacky",
+		Short: "Manage stacks of git branches and pull requests",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateLogLevel(logLevel); err != nil {
+				return err
+			}
+			if err := validateColorMode(colorMode); err != nil {
+				return err
+			}
+			if remoteName == "" {
+				return fmt.Errorf("remote name must not be empty")
+			}
+			return nil
+		},
+	}
 
-func init() {
-	RootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "set the log level")
-	RootCmd.PersistentFlags().StringVar(&colorMode, "color", "auto", "colorize output (always|auto|never)")
-	RootCmd.PersistentFlags().StringVarP(&remoteName, "remote-name", "r", "origin", "git remote used by push commands")
+	root.PersistentFlags().StringVar(&logLevel, "log-level", "info", "set the log level")
+	root.PersistentFlags().StringVar(&colorMode, "color", "auto", "colorize output (always|auto|never)")
+	root.PersistentFlags().StringVarP(&remoteName, "remote-name", "r", "origin", "git remote used by push commands")
 
-	RootCmd.AddCommand(
+	root.AddCommand(
 		newContinueCmd(),
 		newDownCmd(),
 		newUpCmd(),
@@ -59,7 +59,12 @@ func init() {
 		newPrsCmd(),
 		newFoldCmd(),
 	)
+
+	return root
 }
+
+// RootCmd represents the base command invoked without subcommands.
+var RootCmd = NewRootCommand()
 
 func validateLogLevel(value string) error {
 	switch value {
